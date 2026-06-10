@@ -1,0 +1,452 @@
+{
+  "name": "Scrap Instagram post",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Instagram Post Scraper",
+        "formDescription": "Masukkan links instagram",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Link Instagram",
+              "placeholder": "https://www.instagram.com/....",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Catatan Tambahan",
+              "fieldType": "textarea",
+              "placeholder": "Opsional: tambahan catatan"
+            }
+          ]
+        },
+        "options": {
+          "respondWithOptions": {
+            "values": {}
+          }
+        }
+      },
+      "id": "7be7ab18-5423-467a-842d-a7e741b1c3a7",
+      "name": "Form Trigger - Input Link",
+      "type": "n8n-nodes-base.formTrigger",
+      "position": [
+        -736,
+        176
+      ],
+      "typeVersion": 2.2,
+      "webhookId": "1d442173-78c4-4785-91cc-00abbd04f520"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-url",
+              "name": "ig_url",
+              "type": "string",
+              "value": "={{ $json['Link Instagram'] }}"
+            },
+            {
+              "id": "extract-note",
+              "name": "catatan",
+              "type": "string",
+              "value": "={{ $json['Catatan Tambahan'] ?? '' }}"
+            },
+            {
+              "id": "timestamp-input",
+              "name": "submitted_at",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b9cf0885-2da1-4493-80ab-e0e1a103f983",
+      "name": "Extract & Detect Platform",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -512,
+        176
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "merge-url-to-raw",
+              "name": "job_url",
+              "type": "string",
+              "value": "={{ $('Extract & Detect Platform').first().json.ig_url }}"
+            },
+            {
+              "id": "merge-raw-data",
+              "name": "raw_data",
+              "type": "object",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db669f02-13b5-40fd-9ef0-2d976744ab63",
+      "name": "Merge Context ke Raw Data",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        256,
+        112
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={{ $env.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Ekstrak instagram post ini menjadi JSON murni dengan field: nama instagram, judul konten maksimal dua paragraf pertama di caption.\\n\\nData mentah: \" + JSON.stringify($json.markdown || $json.raw_data?.markdown || $json)\n        }\n      ]\n    }\n  ]\n} }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "49e970b3-b6af-47cf-b318-563936e5ec5f",
+      "name": "AI Formatter - Extract Job Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        480,
+        112
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "parse-ai-json",
+              "name": "parsed",
+              "type": "object",
+              "value": "={{ (() => { try { const raw = $json.candidates?.[0]?.content?.parts?.[0]?.text || '{}'; const match = raw.match(/\\{[\\s\\S]*\\}/); return match ? JSON.parse(match[0]) : {}; } catch(e) { return { error: e.message }; } })() }}"
+            },
+            {
+              "id": "pass-job-url",
+              "name": "job_url",
+              "type": "string",
+              "value": "={{ $('Extract & Detect Platform').item.json.job_url }}"
+            },
+            {
+              "id": "pass-platform",
+              "name": "platform",
+              "type": "string",
+              "value": "={{ $('Extract & Detect Platform').item.json.platform }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d99911aa-6fca-42cb-8bc3-c885d4e0ba3a",
+      "name": "Parse AI JSON Output",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        704,
+        112
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-platform",
+              "name": "platform",
+              "type": "string",
+              "value": "={{ $json.platform }}"
+            },
+            {
+              "id": "error-url",
+              "name": "job_url",
+              "type": "string",
+              "value": "={{ $json.job_url }}"
+            },
+            {
+              "id": "error-msg",
+              "name": "error_message",
+              "type": "string",
+              "value": "Platform tidak dikenali. Pastikan URL berasal dari Jobstreet, LinkedIn, Glints, atau Upwork."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a18908e7-3d6a-4ac6-9884-388d1305d94c",
+      "name": "Handle Unknown Platform",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        0,
+        320
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ig_url }}",
+                    "rightValue": "=instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "5495af6c-ff33-42cc-8005-8cfd30023fca"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Instagram"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Unknown"
+        }
+      },
+      "id": "714cd7b0-02dd-4d86-aab9-4bd9aeb0a9d2",
+      "name": "Router Platform",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        -288,
+        128
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "operation": "Scrape single URL",
+        "url": "={{ $('Extract & Detect Platform').first().json.ig_url }}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        0,
+        112
+      ],
+      "id": "273757fd-07a2-466c-8c6f-934649e260f5",
+      "name": "Instagram scrape",
+      "credentials": {
+        "apifyApi": {
+          "id": "5RJTyXvohY00lYOA",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Oj0dB0gqE9ysRyl09aCsNAlzb7W6zn8DsTXSosd3U5o",
+          "mode": "list",
+          "cachedResultName": "Instagram Scap",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Oj0dB0gqE9ysRyl09aCsNAlzb7W6zn8DsTXSosd3U5o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "main",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Oj0dB0gqE9ysRyl09aCsNAlzb7W6zn8DsTXSosd3U5o/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "No": "=",
+            "Nama Dinas": "={{ $json.parsed.nama_instagram }}",
+            "Judul Konten": "={{ $json.parsed.judul_konten }}",
+            "Instagram Link": "={{ $('Extract & Detect Platform').first().json.ig_url }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "No",
+              "displayName": "No",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nama Dinas",
+              "displayName": "Nama Dinas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Judul Konten",
+              "displayName": "Judul Konten",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Instagram Link",
+              "displayName": "Instagram Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        912,
+        112
+      ],
+      "id": "9ab80e49-ffaa-4c69-9b00-b306dd8f1e2a",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "u3IkDdqSnLskIX3V",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Form Trigger - Input Link": {
+      "main": [
+        [
+          {
+            "node": "Extract & Detect Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Detect Platform": {
+      "main": [
+        [
+          {
+            "node": "Router Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Context ke Raw Data": {
+      "main": [
+        [
+          {
+            "node": "AI Formatter - Extract Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Formatter - Extract Job Data": {
+      "main": [
+        [
+          {
+            "node": "Parse AI JSON Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI JSON Output": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Platform": {
+      "main": [
+        [
+          {
+            "node": "Instagram scrape",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Unknown Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram scrape": {
+      "main": [
+        [
+          {
+            "node": "Merge Context ke Raw Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "df5c1ec3-a013-4802-9614-ffad38468f5a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c03407928f29539b79f0dea4538a9f73e38caa78c4615f267f11d6ab9192f1a3"
+  },
+  "nodeGroups": [],
+  "id": "i2ZdhIHNG2SWyHZT",
+  "tags": []
+}
